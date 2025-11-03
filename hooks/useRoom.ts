@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Room, RoomEvent, TokenSource } from 'livekit-client';
+import { Room, RoomEvent, ParticipantEvent, TokenSource } from 'livekit-client';
 import { AppConfig } from '@/app-config';
 import { toastAlert } from '@/components/livekit/alert-toast';
 
@@ -41,15 +41,15 @@ export function useRoom(appConfig: AppConfig) {
     room.on(RoomEvent.Connected, onConnected);
     room.on(RoomEvent.Disconnected, onDisconnected);
     room.on(RoomEvent.MediaDevicesError, onMediaDevicesError);
-    room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
-    room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
+    room.on(ParticipantEvent.ParticipantConnected, onParticipantConnected);
+    room.on(ParticipantEvent.ParticipantDisconnected, onParticipantDisconnected);
 
     return () => {
       room.off(RoomEvent.Connected, onConnected);
       room.off(RoomEvent.Disconnected, onDisconnected);
       room.off(RoomEvent.MediaDevicesError, onMediaDevicesError);
-      room.off(RoomEvent.ParticipantConnected, onParticipantConnected);
-      room.off(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
+      room.off(ParticipantEvent.ParticipantConnected, onParticipantConnected);
+      room.off(ParticipantEvent.ParticipantDisconnected, onParticipantDisconnected);
     };
   }, [room]);
 
@@ -114,6 +114,7 @@ export function useRoom(appConfig: AppConfig) {
       .then((connectionDetails) => {
         console.log('Connection details received:', {
           serverUrl: connectionDetails?.serverUrl,
+          roomName: connectionDetails?.roomName,
           hasToken: !!connectionDetails?.participantToken,
         });
         
