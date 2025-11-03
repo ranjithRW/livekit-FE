@@ -38,21 +38,9 @@ export function useRoom(appConfig: AppConfig) {
       });
     }
 
-    function onConnectionError(error: Error) {
-      if (!aborted.current) {
-        console.error('Connection error:', error);
-        setIsSessionActive(false);
-        toastAlert({
-          title: 'Connection error',
-          description: `${error.name}: ${error.message}`,
-        });
-      }
-    }
-
     room.on(RoomEvent.Connected, onConnected);
     room.on(RoomEvent.Disconnected, onDisconnected);
     room.on(RoomEvent.MediaDevicesError, onMediaDevicesError);
-    room.on(RoomEvent.ConnectionError, onConnectionError);
     room.on(ParticipantEvent.ParticipantConnected, onParticipantConnected);
     room.on(ParticipantEvent.ParticipantDisconnected, onParticipantDisconnected);
 
@@ -60,7 +48,6 @@ export function useRoom(appConfig: AppConfig) {
       room.off(RoomEvent.Connected, onConnected);
       room.off(RoomEvent.Disconnected, onDisconnected);
       room.off(RoomEvent.MediaDevicesError, onMediaDevicesError);
-      room.off(RoomEvent.ConnectionError, onConnectionError);
       room.off(ParticipantEvent.ParticipantConnected, onParticipantConnected);
       room.off(ParticipantEvent.ParticipantDisconnected, onParticipantDisconnected);
     };
