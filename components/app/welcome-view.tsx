@@ -1,5 +1,5 @@
-import { Button } from '@/components/livekit/button';
 import { useState } from 'react';
+import { Button } from '@/components/livekit/button';
 
 function WelcomeImage() {
   return (
@@ -36,7 +36,7 @@ export const WelcomeView = ({
   const handleTestClick = async () => {
     setTesting(true);
     setTestResult(null);
-    
+
     try {
       const response = await fetch('/api/connection-details', {
         method: 'POST',
@@ -78,29 +78,33 @@ export const WelcomeView = ({
           Chat live with your voice AI agent
         </p>
 
-        <div className="mt-6 flex flex-col gap-3 items-center">
+        <div className="mt-6 flex flex-col items-center gap-3">
           {!testPassed && (
-            <Button 
-              variant="primary" 
-              size="lg" 
-              onClick={handleTestClick} 
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleTestClick}
               disabled={testing}
               className="w-64 font-mono"
             >
               {testing ? 'Testing...' : 'Testing'}
             </Button>
           )}
-          
+
           {testPassed && (
             <Button variant="primary" size="lg" onClick={onStartCall} className="w-64 font-mono">
               {startButtonText}
             </Button>
           )}
-          
+
           {testResult && (
-            <div className={`mt-2 p-3 rounded-md max-w-md text-xs text-left ${
-              testPassed ? 'bg-green-500/20 border border-green-500/30' : 'bg-red-500/20 border border-red-500/30'
-            }`}>
+            <div
+              className={`mt-2 max-w-md rounded-md p-3 text-left text-xs ${
+                testPassed
+                  ? 'border border-green-500/30 bg-green-500/20'
+                  : 'border border-red-500/30 bg-red-500/20'
+              }`}
+            >
               <p className="text-foreground font-mono">{testResult}</p>
             </div>
           )}

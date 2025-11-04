@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Room, RoomEvent, ParticipantEvent, TokenSource } from 'livekit-client';
+import { Room, RoomEvent, TokenSource } from 'livekit-client';
 import { AppConfig } from '@/app-config';
 import { toastAlert } from '@/components/livekit/alert-toast';
 
@@ -41,15 +41,15 @@ export function useRoom(appConfig: AppConfig) {
     room.on(RoomEvent.Connected, onConnected);
     room.on(RoomEvent.Disconnected, onDisconnected);
     room.on(RoomEvent.MediaDevicesError, onMediaDevicesError);
-    room.on(ParticipantEvent.ParticipantConnected, onParticipantConnected);
-    room.on(ParticipantEvent.ParticipantDisconnected, onParticipantDisconnected);
+    room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
+    room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
 
     return () => {
       room.off(RoomEvent.Connected, onConnected);
       room.off(RoomEvent.Disconnected, onDisconnected);
       room.off(RoomEvent.MediaDevicesError, onMediaDevicesError);
-      room.off(ParticipantEvent.ParticipantConnected, onParticipantConnected);
-      room.off(ParticipantEvent.ParticipantDisconnected, onParticipantDisconnected);
+      room.off(RoomEvent.ParticipantConnected, onParticipantConnected);
+      room.off(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
     };
   }, [room]);
 
@@ -101,7 +101,9 @@ export function useRoom(appConfig: AppConfig) {
 
     // Warn if agentName is not configured
     if (!appConfig.agentName) {
-      console.warn('⚠️ agentName is not configured. Make sure to set agentName in app-config.ts for the agent to join the room.');
+      console.warn(
+        '⚠️ agentName is not configured. Make sure to set agentName in app-config.ts for the agent to join the room.'
+      );
     } else {
       console.log('Connecting with agent:', appConfig.agentName);
     }
@@ -114,16 +116,31 @@ export function useRoom(appConfig: AppConfig) {
       .then((connectionDetails) => {
         console.log('Connection details received:', {
           serverUrl: connectionDetails?.serverUrl,
-          roomName: connectionDetails?.roomName,
           hasToken: !!connectionDetails?.participantToken,
         });
-        
+
         // Validate connection details
         if (!connectionDetails?.serverUrl || !connectionDetails?.participantToken) {
           throw new Error('Invalid connection details received');
         }
-        
-        console.log('Connecting to room...');
+
+        // Validate server URL format
+        try {
+          const url = new URL(connectionDetails.serverUrl);
+          console.log('Server URL validated:', {
+            protocol: url.protocol,
+            hostname: url.hostname,
+            port: url.port || (url.protocol === 'wss:' ? '443' : url.protocol === 'ws:' ? '80' : 'unknown'),
+          });
+        } catch (urlError) {
+          console.error('Invalid server URL format:', connectionDetails.serverUrl);
+          throw new Error(`Invalid server URL format: ${connectionDetails.serverUrl}`);
+        }
+
+        console.log('Connecting to room...', {
+          serverUrl: connectionDetails.serverUrl,
+          roomState: room.state,
+        });
         return room.connect(connectionDetails.serverUrl, connectionDetails.participantToken);
       })
       .then(() => {
@@ -165,13 +182,16 @@ export function useRoom(appConfig: AppConfig) {
           console.error('Room state is not connected:', room.state);
           throw new Error(`Cannot enable microphone: Room is in ${room.state} state`);
         }
-        
+
         console.log('Room connected, enabling microphone...');
-        console.log('Current participants:', Array.from(room.remoteParticipants.values()).map(p => ({
-          identity: p.identity,
-          isAgent: p.isAgent,
-        })));
-        
+        console.log(
+          'Current participants:',
+          Array.from(room.remoteParticipants.values()).map((p) => ({
+            identity: p.identity,
+            isAgent: p.isAgent,
+          }))
+        );
+
         // Enable microphone after room connection is fully established
         return room.localParticipant
           .setMicrophoneEnabled(true, undefined, {
@@ -180,32 +200,40 @@ export function useRoom(appConfig: AppConfig) {
           .catch((error: any) => {
             console.error('Failed to enable microphone:', error);
             // If preConnectBuffer fails, try without it
-            if (isPreConnectBufferEnabled && (error?.message?.includes('state: closed') || error?.message?.includes('Publisher'))) {
+            if (
+              isPreConnectBufferEnabled &&
+              (error?.message?.includes('state: closed') || error?.message?.includes('Publisher'))
+            ) {
               console.warn('Retrying microphone enable without preConnectBuffer...');
               return room.localParticipant.setMicrophoneEnabled(true, undefined, {
                 preConnectBuffer: false,
               });
             }
             throw error;
-          })
+          });
       })
       .then(() => {
         console.log('Microphone enabled successfully');
         // Log remote participants after a short delay to see if agent joins
         setTimeout(() => {
           const participants = Array.from(room.remoteParticipants.values());
-          console.log('Remote participants after connection:', participants.map(p => ({
-            identity: p.identity,
-            isAgent: p.isAgent,
-            audioTracks: p.audioTrackPublications.size,
-            videoTracks: p.videoTrackPublications.size,
-          })));
-          
-          const agent = participants.find(p => p.isAgent);
+          console.log(
+            'Remote participants after connection:',
+            participants.map((p) => ({
+              identity: p.identity,
+              isAgent: p.isAgent,
+              audioTracks: p.audioTrackPublications.size,
+              videoTracks: p.videoTrackPublications.size,
+            }))
+          );
+
+          const agent = participants.find((p) => p.isAgent);
           if (!agent) {
             console.warn('⚠️ No agent found in room. Make sure:');
             console.warn('  1. agentName is configured correctly in app-config.ts');
-            console.warn('  2. Your agent service is running and connected to the same LiveKit server');
+            console.warn(
+              '  2. Your agent service is running and connected to the same LiveKit server'
+            );
             console.warn('  3. The agent has the correct API_KEY and API_SECRET');
           } else {
             console.log('✅ Agent found:', agent.identity);
@@ -224,9 +252,33 @@ export function useRoom(appConfig: AppConfig) {
 
         setIsSessionActive(false);
         console.error('Connection error:', error);
+        
+        // Provide more helpful error messages for common connection issues
+        let errorMessage = error.message || 'Unknown error';
+        let errorTitle = 'There was an error connecting to the agent';
+        
+        if (errorMessage.includes('could not establish pc connection') || errorMessage.includes('peer connection')) {
+          errorTitle = 'Connection failed: Unable to establish connection';
+          errorMessage = 'WebRTC peer connection could not be established. This may be due to:\n\n' +
+            '• Network connectivity issues\n' +
+            '• Firewall blocking WebRTC connections\n' +
+            '• Invalid server URL or token\n' +
+            '• Browser compatibility issues\n\n' +
+            'Please check your network connection and try again.';
+        } else if (errorMessage.includes('Connection timeout')) {
+          errorTitle = 'Connection timeout';
+          errorMessage = 'The connection attempt timed out. Please check:\n\n' +
+            '• Your internet connection\n' +
+            '• The LiveKit server is accessible\n' +
+            '• Try refreshing the page';
+        } else if (errorMessage.includes('Invalid connection details')) {
+          errorTitle = 'Invalid connection details';
+          errorMessage = 'The connection details received were invalid. Please contact support.';
+        }
+        
         toastAlert({
-          title: 'There was an error connecting to the agent',
-          description: `${error.name}: ${error.message}`,
+          title: errorTitle,
+          description: errorMessage,
         });
       });
   }, [room, appConfig, tokenSource]);
