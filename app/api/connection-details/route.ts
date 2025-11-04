@@ -44,9 +44,31 @@ export async function POST(req: Request) {
       agentName
     );
 
+    // Normalize server URL based on request protocol
+    // If request is from HTTPS but server URL uses ws://, convert to wss://
+    let serverUrl = LIVEKIT_URL;
+    try {
+      const url = new URL(LIVEKIT_URL);
+      const requestUrl = new URL(req.url);
+      const isRequestHttps = requestUrl.protocol === 'https:';
+      
+      // Convert ws:// to wss:// if request came from HTTPS
+      if (isRequestHttps && url.protocol === 'ws:') {
+        url.protocol = 'wss:';
+        serverUrl = url.toString();
+        console.log('Normalized server URL for HTTPS request:', {
+          original: LIVEKIT_URL,
+          normalized: serverUrl,
+        });
+      }
+    } catch (urlError) {
+      // If URL parsing fails, use the original URL
+      console.warn('Could not parse LIVEKIT_URL, using as-is:', LIVEKIT_URL);
+    }
+
     // Return connection details
     const data: ConnectionDetails = {
-      serverUrl: LIVEKIT_URL,
+      serverUrl,
       roomName,
       participantToken: participantToken,
       participantName,

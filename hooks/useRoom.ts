@@ -124,13 +124,33 @@ export function useRoom(appConfig: AppConfig) {
           throw new Error('Invalid connection details received');
         }
 
-        // Validate server URL format
+        // Validate and normalize server URL format
+        let serverUrl = connectionDetails.serverUrl;
         try {
-          const url = new URL(connectionDetails.serverUrl);
+          const url = new URL(serverUrl);
+          
+          // If page is loaded over HTTPS, ensure WebSocket uses WSS (secure)
+          const isPageHttps = window.location.protocol === 'https:';
+          if (isPageHttps && url.protocol === 'ws:') {
+            // Convert ws:// to wss:// for HTTPS pages
+            // Note: LiveKit servers typically use the same port for both WS and WSS
+            // (e.g., port 7880), so we preserve the port number
+            url.protocol = 'wss:';
+            serverUrl = url.toString();
+            console.warn('Converted insecure WebSocket to secure:', {
+              original: connectionDetails.serverUrl,
+              converted: serverUrl,
+              reason: 'Page loaded over HTTPS requires WSS',
+              note: 'Port number preserved - ensure your LiveKit server supports WSS on this port',
+            });
+          }
+          
           console.log('Server URL validated:', {
             protocol: url.protocol,
             hostname: url.hostname,
             port: url.port || (url.protocol === 'wss:' ? '443' : url.protocol === 'ws:' ? '80' : 'unknown'),
+            isPageHttps,
+            finalUrl: serverUrl,
           });
         } catch (urlError) {
           console.error('Invalid server URL format:', connectionDetails.serverUrl);
@@ -138,10 +158,10 @@ export function useRoom(appConfig: AppConfig) {
         }
 
         console.log('Connecting to room...', {
-          serverUrl: connectionDetails.serverUrl,
+          serverUrl,
           roomState: room.state,
         });
-        return room.connect(connectionDetails.serverUrl, connectionDetails.participantToken);
+        return room.connect(serverUrl, connectionDetails.participantToken);
       })
       .then(() => {
         // Wait for the Connected event explicitly, as connect() promise may resolve before connection is fully established
@@ -257,7 +277,14 @@ export function useRoom(appConfig: AppConfig) {
         let errorMessage = error.message || 'Unknown error';
         let errorTitle = 'There was an error connecting to the agent';
         
-        if (errorMessage.includes('could not establish pc connection') || errorMessage.includes('peer connection')) {
+        if (errorMessage.includes('Mixed Content') || errorMessage.includes('insecure WebSocket')) {
+          errorTitle = 'Security Error: Mixed Content';
+          errorMessage = 'The page is loaded over HTTPS but tried to connect using an insecure WebSocket (ws://).\n\n' +
+            'This has been automatically converted to WSS (wss://), but you may need to:\n\n' +
+            '• Ensure your LiveKit server supports WSS on the configured port\n' +
+            '• Update your LIVEKIT_URL environment variable to use wss:// instead of ws://\n' +
+            '• Configure your backend to return secure WebSocket URLs for HTTPS pages';
+        } else if (errorMessage.includes('could not establish pc connection') || errorMessage.includes('peer connection')) {
           errorTitle = 'Connection failed: Unable to establish connection';
           errorMessage = 'WebRTC peer connection could not be established. This may be due to:\n\n' +
             '• Network connectivity issues\n' +
