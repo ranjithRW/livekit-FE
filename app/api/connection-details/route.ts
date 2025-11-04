@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       const url = new URL(LIVEKIT_URL);
       const requestUrl = new URL(req.url);
       const isRequestHttps = requestUrl.protocol === 'https:';
-      
+
       // Convert ws:// to wss:// if request came from HTTPS
       if (isRequestHttps && url.protocol === 'ws:') {
         url.protocol = 'wss:';
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
           normalized: serverUrl,
         });
       }
-    } catch (urlError) {
+    } catch {
       // If URL parsing fails, use the original URL
       console.warn('Could not parse LIVEKIT_URL, using as-is:', LIVEKIT_URL);
     }
